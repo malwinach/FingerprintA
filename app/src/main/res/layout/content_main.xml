@@ -18,13 +18,4 @@
         tools:layout_editor_absoluteX="10dp"
         tools:layout_editor_absoluteY="50dp" />
 
-    <Button
-        android:id="@+id/change"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="96dp"
-        android:text="Zmień hasło"
-        tools:layout_editor_absoluteX="227dp"
-        android:onClick="go"/>
-
 </androidx.constraintlayout.widget.ConstraintLayout>

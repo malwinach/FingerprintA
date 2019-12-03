@@ -1,26 +1,38 @@
 package com.example.myapplication;
 
+import android.os.Build;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.widget.Toast;
+
+import androidx.annotation.RequiresApi;
+
+import java.io.IOException;
 import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.Key;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
 
 
 public class MCrypt {
 
-    private static String iv;
-    private static String SecretKey;
-    private static IvParameterSpec ivspec;
-    private static SecretKeySpec keyspec;
-    private static Cipher cipher;
+    public static Cipher CIPHER_AES;
+    public String alias = "kluczyk";
 
-
-    public MCrypt() {
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public MCrypt() throws NoSuchProviderException, NoSuchAlgorithmException {
 
         try {
-            cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            CIPHER_AES = Cipher.getInstance("AES/CBC/PKCS5Padding");
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
@@ -29,43 +41,109 @@ public class MCrypt {
         }
     }
 
-    public static void setKeys() {
-        iv = MainActivity.hashKey.substring(5,21);
-        SecretKey = MainActivity.hashKey.substring(22,38);
-        ivspec = new IvParameterSpec(iv.getBytes());
-        keyspec = new SecretKeySpec(SecretKey.getBytes(), "AES");
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    private Key genereteOrGetKey() {
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            if (!keyStore.containsAlias(alias)) {
+                KeyGenerator keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+
+                keyGenerator.init(new KeyGenParameterSpec.Builder(alias,
+                        KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .build());
+
+                return keyGenerator.generateKey();
+            } else {
+                return keyStore.getKey(alias, null);
+            }
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (CertificateException e) {
+            e.printStackTrace();
+        } catch (KeyStoreException e) {
+            e.printStackTrace();
+        } catch (InvalidAlgorithmParameterException e) {
+            e.printStackTrace();
+        } catch (UnrecoverableKeyException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (NoSuchProviderException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
-    public static byte[] encrypt(String text) throws Exception {
-        setKeys();
-        if (text == null || text.length() == 0)
-            throw new Exception("Empty string");
 
-        byte[] encrypted = null;
+    private byte[] encrypt(Key key, String plainText, String ivFilename){
+        byte[] plainTextAsByteArray = plainText.getBytes();
+        byte[] encryptedText;
         try {
-            cipher.init(Cipher.ENCRYPT_MODE, keyspec, ivspec);
+            Cipher cipher = Cipher.getInstance(CIPHER_AES);
+            //System.out.println("Cipher created");
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            //System.out.println("Cipher init");
+            encryptedText = cipher.doFinal(plainTextAsByteArray);
+            //System.out.println("encrypted");
+            //System.out.println("IV: " + Arrays.toString(cipher.getIV()));
+            Save(ivFilename, Base64.encodeToString(cipher.getIV(), Base64.DEFAULT));
 
-            encrypted = cipher.doFinal(padString(text).getBytes());
-        } catch (Exception e) {
-            throw new Exception("[encrypt] " + e.getMessage());
+            //System.out.println("ENCRYPTED TEXT " + Arrays.toString(encryptedText));
+            return encryptedText;
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            System.out.println("encrypt");
+        } catch (InvalidKeyException e) {
+            e.printStackTrace();
+            System.out.println("encrypt");
+
+        } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+            System.out.println("encrypt");
+
+        } catch (BadPaddingException e) {
+            e.printStackTrace();
+            System.out.println("encrypt");
+
+        } catch (IllegalBlockSizeException e) {
+            e.printStackTrace();
+            System.out.println("encrypt");
+
         }
-        return encrypted;
+
+        return null;
     }
 
-    public static byte[] decrypt(String text) throws Exception {
-        setKeys();
-        if (text == null || text.length() == 0)
-            throw new Exception("Empty string");
+    private byte[] decrypt(Key key, byte[] encryptedText, String ivFilename){
 
-        byte[] decrypted = null;
-        try {
-            cipher.init(Cipher.DECRYPT_MODE, keyspec, ivspec);
-
-            decrypted = cipher.doFinal(hexToBytes(text));
-        } catch (Exception e) {
-            throw new Exception("[decrypt] " + e.getMessage());
+        try{
+            Cipher cipher = Cipher.getInstance(CIPHER_AES);
+            //System.out.println("D CIPHER INST");
+            byte[] iv = Base64.decode(Open(ivFilename), Base64.DEFAULT);
+            //System.out.println("FILE IV " + iv);
+            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
+            //System.out.println("D CIPHER INIT");
+            byte[] plaintText = cipher.doFinal(encryptedText);
+            //System.out.println("DECRYPTED" + Arrays.toString(plaintText));
+            return plaintText;
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        } catch (InvalidKeyException e) {
+            e.printStackTrace();
+        } catch (InvalidAlgorithmParameterException e) {
+            e.printStackTrace();
+        } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+        } catch (BadPaddingException e) {
+            e.printStackTrace();
+        } catch (IllegalBlockSizeException e) {
+            e.printStackTrace();
         }
-        return decrypted;
+
+        return null;
     }
 
     public static String byteArrayToHexString(byte[] array) {
